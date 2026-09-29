@@ -993,6 +993,8 @@ public class Folder extends AbstractFloatingView implements ClipPathView, DragSo
         mActivityContext.getDragController().removeDropTarget(this);
         clearFocus();
         if (mFolderIcon != null) {
+            mFolderIcon.onTitleChanged(mInfo.title);
+            mFolderIcon.invalidate();
             mFolderIcon.setVisibility(View.VISIBLE);
             mFolderIcon.setIconVisible(true);
             mFolderIcon.mFolderName.setTextVisibility(true);
