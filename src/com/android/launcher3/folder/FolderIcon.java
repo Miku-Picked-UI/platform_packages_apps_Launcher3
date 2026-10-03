@@ -20,6 +20,7 @@ import static com.android.launcher3.folder.ClippedFolderIconLayoutRule.ICON_OVER
 import static com.android.launcher3.folder.ClippedFolderIconLayoutRule.MAX_NUM_ITEMS_IN_PREVIEW;
 import static com.android.launcher3.folder.FolderGridOrganizer.createFolderGridOrganizer;
 import static com.android.launcher3.folder.PreviewItemManager.INITIAL_ITEM_ANIMATION_DURATION;
+import static com.android.launcher3.LauncherPrefsExt.SHOW_DESKTOP_LABELS;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_AUTO_LABELED;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_AUTO_LABELING_SKIPPED_EMPTY_PRIMARY;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_AUTO_LABELING_SKIPPED_EMPTY_SUGGESTIONS;
@@ -59,6 +60,8 @@ import com.android.launcher3.CheckLongPressHelper;
 import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.DropTarget.DragObject;
 import com.android.launcher3.Launcher;
+import com.android.launcher3.LauncherPrefChangeListener;
+import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.LauncherSettings;
 import com.android.launcher3.LauncherState;
 import com.android.launcher3.OnAlarmListener;
@@ -191,6 +194,8 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     private boolean mRequestedTextVisible = true;
 
+    private final LauncherPrefChangeListener mPrefListener;
+
     public void setIsResizing(boolean isResizing) {
         if (mFolderName == null) return;
         updateTextVisibility();
@@ -200,7 +205,7 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     public boolean shouldShowFolderName() {
         return mRequestedTextVisible
                 && mFolderName != null
-                && mFolderName.shouldShowLabel()
+                && SHOW_DESKTOP_LABELS.get(getContext())
                 && mInfo != null
                 && !TextUtils.isEmpty(mInfo.title);
     }
@@ -278,6 +283,18 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         mLongPressHelper = new CheckLongPressHelper(this);
         mPreviewLayoutRule = new ClippedFolderIconLayoutRule();
         mPreviewItemManager = new PreviewItemManager(this);
+        mPrefListener = key -> {
+            if (SHOW_DESKTOP_LABELS.getSharedPrefKey().equals(key)) {
+                updateTextVisibility();
+                mPreviewItemManager.recomputePreviewDrawingParams();
+                layoutFolderName();
+                invalidate();
+                requestLayout();
+                if (getParent() instanceof View parentView) {
+                    parentView.invalidate();
+                }
+            }
+        };
         mDotParams = new DotRenderer.DrawParams();
         mDotParams.setDotColor(Themes.getAttrColor(context, R.attr.notificationDotColor));
         mDotParams.shapeInfo = ThemeManager.INSTANCE.get(context).getIconState().getIconShapeInfo();
@@ -1213,6 +1230,9 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         layoutFolderName();
         invalidate();
         requestLayout();
+        if (getParent() instanceof View parentView) {
+            parentView.invalidate();
+        }
     }
 
     @Override
@@ -1350,10 +1370,17 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        LauncherPrefs.get(getContext()).addListener(mPrefListener, SHOW_DESKTOP_LABELS);
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
         if (mPressScaleAnimator != null) {
             mPressScaleAnimator.cancel();
         }
+        LauncherPrefs.get(getContext()).removeListener(mPrefListener, SHOW_DESKTOP_LABELS);
         super.onDetachedFromWindow();
     }
 

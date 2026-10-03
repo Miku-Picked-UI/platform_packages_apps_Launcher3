@@ -99,6 +99,7 @@ public class PreviewItemManager {
     private int mPrevSpanX = -1;
     private int mPrevSpanY = -1;
     private int mPrevTopPadding = -1;
+    private int mPrevLabelHeight = -1;
     private Drawable mReferenceDrawable = null;
 
     private int mNumOfPrevItems = 0;
@@ -178,13 +179,15 @@ public class PreviewItemManager {
             int drawableSize, int totalWidth, int totalHeight) {
         int spanX = mIcon.getCurrentSpanX();
         int spanY = mIcon.getCurrentSpanY();
+        int labelHeight = mIcon.getFolderLabelHeight();
 
         boolean geometryChanged =
                 mTotalWidth != totalWidth
                         || mTotalHeight != totalHeight
                         || mPrevSpanX != spanX
                         || mPrevSpanY != spanY
-                        || mPrevTopPadding != mIcon.getPaddingTop();
+                        || mPrevTopPadding != mIcon.getPaddingTop()
+                        || mPrevLabelHeight != labelHeight;
 
         if (mIntrinsicIconSize != drawableSize || geometryChanged) {
             boolean animateResize =
@@ -208,6 +211,7 @@ public class PreviewItemManager {
             mPrevSpanX = spanX;
             mPrevSpanY = spanY;
             mPrevTopPadding = mIcon.getPaddingTop();
+            mPrevLabelHeight = labelHeight;
 
             mIcon.mBackground.setup(
                     mIcon.getContext(),
