@@ -848,7 +848,8 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     }
 
     private void handleClick(View view) {
-        if (mPressedPreviewItem != null
+        if (isMultiSpanFolder()
+                && mPressedPreviewItem != null
                 && mPressedPreviewItem.getItem() instanceof WorkspaceItemInfo item
                 && mActivity instanceof Launcher launcher
                 && mFolder != null
@@ -1247,8 +1248,10 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                     return false;
                 }
 
-                mPressedPreviewItem =
-                        mPreviewItemManager.findDirectItemAt(event.getX(), event.getY());
+                if (isMultiSpanFolder()) {
+                    mPressedPreviewItem =
+                            mPreviewItemManager.findDirectItemAt(event.getX(), event.getY());
+                }
                 break;
 
             case MotionEvent.ACTION_MOVE:

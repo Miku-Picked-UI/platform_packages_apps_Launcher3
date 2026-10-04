@@ -80,6 +80,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
     private final Rect mBackgroundBounds = new Rect();
     private final Rect mTargetBackgroundBounds = new Rect();
     private final RectF mScaledBackgroundBounds = new RectF();
+    private final RectF mStrokeBoundsF = new RectF();
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -440,6 +441,10 @@ public class PreviewBackground extends DelegatedCellDrawing {
         drawShadow(canvas);
     }
 
+    private boolean isMultiSpan() {
+        return mSpanX > 1 || mSpanY > 1;
+    }
+
     private ShapeDelegate getShape() {
         return ThemeManager.INSTANCE.get(mContext).getFolderShape();
     }
@@ -448,7 +453,7 @@ public class PreviewBackground extends DelegatedCellDrawing {
             ShapeDelegate shape,
             RectF bounds,
             float scale) {
-        if (mIsWorkspace || mSpanX > 1 || mSpanY > 1) {
+        if (isMultiSpan()) {
             float widgetRadius = RoundedCornerEnforcement.computeEnforcedRadius(mContext);
             if (widgetRadius <= 0) {
                 float density = mContext.getResources().getDisplayMetrics().density;
@@ -457,18 +462,21 @@ public class PreviewBackground extends DelegatedCellDrawing {
             return Math.min(widgetRadius * scale, Math.min(bounds.width(), bounds.height()) / 2f);
         }
 
-        if (!(shape instanceof ShapeDelegate.RoundedSquare roundedSquare)) {
-            return 0f;
-        }
-
         if (shape instanceof ShapeDelegate.Circle) {
             return Math.min(bounds.width(), bounds.height()) / 2f;
         }
 
-        float fixedRadius =
-                previewSize / 2f * roundedSquare.getRadiusRatio() * scale;
+        if (shape instanceof ShapeDelegate.RoundedSquare roundedSquare) {
+            float fixedRadius =
+                    bounds.width() / 2f * roundedSquare.getRadiusRatio() * scale;
+            return Math.min(
+                    fixedRadius,
+                    Math.min(bounds.width(), bounds.height()) / 2f);
+        }
+
+        float defaultAdaptiveRadius = previewSize / 2f * 0.44f * scale;
         return Math.min(
-                fixedRadius,
+                defaultAdaptiveRadius,
                 Math.min(bounds.width(), bounds.height()) / 2f);
     }
 
@@ -477,28 +485,24 @@ public class PreviewBackground extends DelegatedCellDrawing {
             RectF bounds,
             float scale,
             Paint paint) {
-        ShapeDelegate shape = getShape();
-
-        if (shape instanceof ShapeDelegate.RoundedSquare) {
-            float radius = getCornerRadius(shape, bounds, scale);
+        if (isMultiSpan()) {
+            float radius = getCornerRadius(getShape(), bounds, scale);
             canvas.drawRoundRect(bounds, radius, radius, paint);
-        } else {
-            shape.drawShapeInBounds(canvas, bounds, paint);
+            return;
         }
+        getShape().drawShapeInBounds(canvas, bounds, paint);
     }
 
     private void addShapeToPathInBounds(
             Path path,
             RectF bounds,
             float scale) {
-        ShapeDelegate shape = getShape();
-
-        if (shape instanceof ShapeDelegate.RoundedSquare) {
-            float radius = getCornerRadius(shape, bounds, scale);
+        if (isMultiSpan()) {
+            float radius = getCornerRadius(getShape(), bounds, scale);
             path.addRoundRect(bounds, radius, radius, Path.Direction.CW);
-        } else {
-            shape.addToPathInBounds(path, bounds);
+            return;
         }
+        getShape().addToPathInBounds(path, bounds);
     }
 
     float getDrawnCornerRadius() {
@@ -596,9 +600,9 @@ public class PreviewBackground extends DelegatedCellDrawing {
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeWidth(mStrokeWidth);
 
-        RectF bounds = getBoundsAtScale(mScale);
-        bounds.inset(1f, 1f);
-        drawShapeInBounds(canvas, bounds, mScale, mPaint);
+        mStrokeBoundsF.set(getBoundsAtScale(mScale));
+        mStrokeBoundsF.inset(1f, 1f);
+        drawShapeInBounds(canvas, mStrokeBoundsF, mScale, mPaint);
     }
 
     /**
