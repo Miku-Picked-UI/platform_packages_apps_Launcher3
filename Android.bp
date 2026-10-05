@@ -620,6 +620,8 @@ android_library {
     // dependency. See b/208647810 for how this can go wrong.
     static_libs: [
         "SystemUI-statsd",
+        // [PenguinOS] DeX's dock and Launchpad (vendor/miku/picked/penguin_dex)
+        "PenguinDexLauncher",
         "QuickstepResLib",
     ],
     manifest: "quickstep/AndroidManifest.xml",

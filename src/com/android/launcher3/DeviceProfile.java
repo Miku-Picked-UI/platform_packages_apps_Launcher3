@@ -284,8 +284,10 @@ public class DeviceProfile {
         mInfo = info;
         boolean taskbarOrBubbleBarOnPhones = enableTinyTaskbar()
                 || (enableBubbleBar() && enableBubbleBarOnPhones());
+        // [PenguinOS] A DeX desktop always has its taskbar.
         isTaskbarPresent =
-                (mDeviceProperties.isTablet() || (taskbarOrBubbleBarOnPhones && isGestureMode))
+                (mDeviceProperties.isTablet() || mDeviceProperties.isExternalDisplay()
+                        || (taskbarOrBubbleBarOnPhones && isGestureMode))
                         && wmProxy.isTaskbarDrawnInProcess();
 
         // Some more constants.

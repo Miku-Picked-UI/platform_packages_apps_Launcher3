@@ -34,6 +34,7 @@ import com.android.launcher3.taskbar.TaskbarPinningController.Companion.PINNING_
 import com.android.launcher3.taskbar.TaskbarPinningController.Companion.PINNING_TRANSIENT
 import com.android.launcher3.taskbar.Utilities.getShapedTaskbarRadius
 import com.android.launcher3.util.SettingsCache
+import com.penguin.dex.launcher.DexDock
 import kotlin.math.min
 
 /** Helps draw the taskbar background, made up of a rectangle plus two inverted rounded corners. */
@@ -162,6 +163,20 @@ class TaskbarBackgroundRenderer(private val context: TaskbarActivityContext) {
     }
 
     private fun drawPersistentBackground(canvas: Canvas) {
+        // [PenguinOS] A DeX desktop's taskbar is a floating, frosted dock.
+        if (context.isDexDock && !transientBackgroundBounds.isEmpty) {
+            DexDock.draw(
+                canvas,
+                context.dragLayer,
+                transientBackgroundBounds.left.toFloat(),
+                transientBackgroundBounds.right.toFloat(),
+                min(maxPersistentTaskbarHeight, backgroundHeight),
+                paint.color,
+                paint.alpha,
+                context.resources.displayMetrics.density,
+            )
+            return
+        }
         if (isAnimatingPinning || isAnimatingPersistentTaskbar) {
             val persistentTaskbarHeight = maxPersistentTaskbarHeight * backgroundProgress
             canvas.translate(0f, canvas.height - persistentTaskbarHeight)

@@ -197,6 +197,8 @@ import com.android.wm.shell.shared.desktopmode.DesktopModeTransitionSource;
 import com.android.wm.shell.shared.desktopmode.DesktopState;
 import com.android.wm.shell.shared.desktopmode.DesktopTaskToFrontReason;
 
+import com.penguin.dex.launcher.DexFeatures;
+
 import java.io.PrintWriter;
 import java.util.Collections;
 import java.util.List;
@@ -644,6 +646,10 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
      * single window for taskbar and navbar.
      */
     public boolean isPhoneMode() {
+        // [PenguinOS] A DeX desktop always has its taskbar; the setting is the phone screen's.
+        if (mDeviceProfile.getDeviceProperties().isExternalDisplay()) {
+            return false;
+        }
         if (mDeviceProfile.isTaskbarPresent &&
                 !SettingsCache.INSTANCE.get(this).getValue(ENABLE_TASKBAR)) {
             return true;
@@ -887,7 +893,19 @@ public class TaskbarActivityContext extends BaseTaskbarContext {
 
     /** Returns whether taskbar should start align. */
     public boolean shouldStartAlignTaskbar() {
+        // [PenguinOS] A DeX desktop centres its dock, as a Mac's does.
+        if (isDexDock()) return false;
         return isThreeButtonNav() && mDeviceProfile.getTaskbarProfile().isStartAlignTaskbar();
+    }
+
+    /** [PenguinOS] Whether this taskbar is a DeX desktop's. */
+    public boolean isDexDesktop() {
+        return mDeviceProfile.getDeviceProperties().isExternalDisplay();
+    }
+
+    /** [PenguinOS] Whether this taskbar is a DeX desktop's, drawn as a floating dock. */
+    public boolean isDexDock() {
+        return isDexDesktop() && DexFeatures.dock(this);
     }
 
     public boolean isGestureNav() {
