@@ -190,9 +190,21 @@ public class LauncherSwipeHandlerV2 extends AbsSwipeUpHandler<
                 // We want the icon alpha to be 1 once this threshold is met, so that it can be
                 // seen morphing into the icon shape. But before the threshold, we want to limit
                 // the alpha to reduce the blur effect behind the window.
-                float iconAlpha = Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
+                float iconAlpha = mSiblingAnimation != null && mSiblingAnimation.isCos()
+                        // [PenguinOS] ColorOS motion: the window hands over to its icon on a
+                        // fixed, quick curve shortly after the finger lifts.
+                        ? mSiblingAnimation.getCosFadeProgress()
+                        : Interpolators.clampToProgress(progress, 0f, windowAlphaThreshold);
                 floatingIconView.update(iconAlpha, currentRect, progress, windowAlphaThreshold,
                         radius, false, overlayAlpha);
+            }
+
+            @Override
+            protected float getWindowAlpha(float progress) {
+                if (mSiblingAnimation != null && mSiblingAnimation.isCos()) {
+                    return 1 - mSiblingAnimation.getCosFadeProgress();
+                }
+                return super.getWindowAlpha(progress);
             }
 
             @Override

@@ -20,6 +20,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 import android.animation.Animator;
 import android.content.Context;
+import android.os.SystemClock;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -32,6 +33,7 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.launcher3.DeviceProfile;
+import com.android.launcher3.QuickstepTransitionManager;
 import com.android.launcher3.R;
 import com.android.launcher3.Utilities;
 import com.android.launcher3.util.DynamicResource;
@@ -129,6 +131,12 @@ public class RectFSpringAnim extends ReleaseCheck {
     protected final float mDampingX;
     protected final float mDampingY;
     protected final float mRectStiffness;
+    // [PenguinOS] ColorOS app motion: the closing springs come from the config, the size
+    // spring may pass its target for the landing bounce, and the window hands over to its icon
+    // on a fixed curve (getCosFadeProgress).
+    protected final float mRectDamping;
+    private final boolean mCos;
+    private long mCosStartTime;
 
     public RectFSpringAnim(SpringConfig config) {
         mStartRect = config.startRect;
@@ -143,8 +151,28 @@ public class RectFSpringAnim extends ReleaseCheck {
         mDampingX = config.dampingX;
         mDampingY = config.dampingY;
         mRectStiffness = config.rectStiffness;
+        mRectDamping = config.rectDamping;
+        mCos = config.cos;
 
         mCurrentY = getTrackedYFromRect(mStartRect);
+    }
+
+    /**
+     * How far the window has given way to its icon (PenguinOS, measured on OxygenOS 16): the
+     * window flies for about 55 ms after the finger lifts and then cuts over quickly, 95% to
+     * 10% in about 40 ms. 0 when this is not the ColorOS motion or it has not started.
+     */
+    public float getCosFadeProgress() {
+        if (mCosStartTime == 0) {
+            return 0f;
+        }
+        float t = Math.max(0, SystemClock.uptimeMillis() - mCosStartTime - 55) / 1000f;
+        float wt = 85f * t;
+        return 1 - (1 + wt) * (float) Math.exp(-wt);
+    }
+
+    public boolean isCos() {
+        return mCos;
     }
 
     public RectF getTargetRect() {
@@ -236,8 +264,14 @@ public class RectFSpringAnim extends ReleaseCheck {
         yVelocityPxPerS = adjustVelocity(
                 yVelocityPxPerS, minVelocityYPxPerS, maxVelocityYPxPerS, fallOffFactor);
 
-        float stiffnessX = rp.getFloat(R.dimen.swipe_up_rect_x_stiffness);
-        float dampingX = rp.getFloat(R.dimen.swipe_up_rect_x_damping_ratio);
+        if (mCos) {
+            // OxygenOS turns the window home at once: no drift on along the swipe.
+            if ((endX - startX) * xVelocityPxPerS < 0) xVelocityPxPerS *= 0.25f;
+            if ((endY - startY) * yVelocityPxPerS < 0) yVelocityPxPerS = 0f;
+        }
+
+        float stiffnessX = mCos ? mStiffnessX : rp.getFloat(R.dimen.swipe_up_rect_x_stiffness);
+        float dampingX = mCos ? mDampingX : rp.getFloat(R.dimen.swipe_up_rect_x_damping_ratio);
         mRectXSpring =
                 new SpringAnimation(this, RECT_CENTER_X)
                         .setSpring(
@@ -248,8 +282,8 @@ public class RectFSpringAnim extends ReleaseCheck {
                         .setStartVelocity(xVelocityPxPerS)
                         .addEndListener(onXEndListener);
 
-        float stiffnessY = rp.getFloat(R.dimen.swipe_up_rect_y_stiffness);
-        float dampingY = rp.getFloat(R.dimen.swipe_up_rect_y_damping_ratio);
+        float stiffnessY = mCos ? mStiffnessY : rp.getFloat(R.dimen.swipe_up_rect_y_stiffness);
+        float dampingY = mCos ? mDampingY : rp.getFloat(R.dimen.swipe_up_rect_y_damping_ratio);
         mRectYSpring =
                 new SpringAnimation(this, RECT_Y)
                         .setSpring(
@@ -261,16 +295,29 @@ public class RectFSpringAnim extends ReleaseCheck {
                         .setStartVelocity(yVelocityPxPerS)
                         .addEndListener(onYEndListener);
 
-        float stiffnessZ = rp.getFloat(R.dimen.swipe_up_rect_scale_stiffness_v2);
-        float dampingZ = rp.getFloat(R.dimen.swipe_up_rect_scale_damping_ratio_v2);
+        float stiffnessZ = mCos ? mRectStiffness
+                : rp.getFloat(R.dimen.swipe_up_rect_scale_stiffness_v2);
+        float dampingZ = mCos && mRectDamping >= 0 ? mRectDamping
+                : rp.getFloat(R.dimen.swipe_up_rect_scale_damping_ratio_v2);
+        float scaleVelocity = velocityPxPerMs.y * minVisibleChange;
+        if (mCos) {
+            // Keep the window shrinking at the pace it had under the finger: OxygenOS flies it
+            // home at about 2.8 screen widths a second from the moment the finger lifts.
+            float span = Math.max(1f, mStartRect.width() - mTargetRect.width());
+            float flight = 2.8f * context.getResources().getDisplayMetrics().widthPixels / span;
+            scaleVelocity = Utilities.boundToRange(Math.max(flight,
+                    -velocityPxPerMs.y * 1000 / mStartRect.height()), 0f, 12f);
+            mCosStartTime = SystemClock.uptimeMillis();
+        }
         mRectScaleAnim =
                 new SpringAnimation(this, RECT_SCALE_PROGRESS)
                         .setSpring(
                                 new SpringForce(1f)
                                         .setStiffness(stiffnessZ)
                                         .setDampingRatio(dampingZ))
-                        .setStartVelocity(velocityPxPerMs.y * minVisibleChange)
-                        .setMaxValue(1f)
+                        .setStartVelocity(scaleVelocity)
+                        // ColorOS lets the size spring pass its target for the landing bounce.
+                        .setMaxValue(mCos ? 1.25f : 1f)
                         .setMinimumVisibleChange(minVisibleChange)
                         .addEndListener((animation, canceled, value, velocity) -> {
                             mRectScaleAnimEnded = true;
@@ -331,6 +378,12 @@ public class RectFSpringAnim extends ReleaseCheck {
                     mTargetRect.width());
             float currentHeight = Utilities.mapRange(mCurrentScaleProgress, mStartRect.height(),
                     mTargetRect.height());
+            if (mCos && mStartRect.width() > 0 && mTargetRect.width() > 0) {
+                // The window keeps morphing its aspect ratio towards the icon's as it shrinks.
+                currentHeight = currentWidth * Utilities.mapRange(mCurrentScaleProgress,
+                        mStartRect.height() / mStartRect.width(),
+                        mTargetRect.height() / mTargetRect.width());
+            }
             switch (mTracking) {
                 case TRACKING_TOP:
                     mCurrentRect.set(mCurrentCenterX - currentWidth / 2,
@@ -352,7 +405,9 @@ public class RectFSpringAnim extends ReleaseCheck {
                     break;
             }
             for (OnUpdateListener onUpdateListener : mOnUpdateListeners) {
-                onUpdateListener.onUpdate(mCurrentRect, mCurrentScaleProgress);
+                // Only the rect follows the bounce past the target; progress-driven effects
+                // (alpha, corner radius, home play fraction) stay within [0, 1].
+                onUpdateListener.onUpdate(mCurrentRect, Math.min(1f, mCurrentScaleProgress));
             }
         }
     }
@@ -422,6 +477,8 @@ public class RectFSpringAnim extends ReleaseCheck {
         protected float dampingX;
         protected float dampingY;
         protected float rectStiffness;
+        protected float rectDamping = -1f;
+        protected boolean cos;
         protected float minVisChange;
         protected int maxVelocityPxPerS;
 
@@ -461,6 +518,39 @@ public class RectFSpringAnim extends ReleaseCheck {
             rectStiffness = shouldUseHigherStiffness
                     ? rp.getFloat(R.dimen.swipe_up_rect_scale_higher_stiffness)
                     : rp.getFloat(R.dimen.swipe_up_rect_scale_stiffness);
+
+            if (QuickstepTransitionManager.cosExperience(context)) {
+                // [PenguinOS] ColorOS 17 flies a closing window home at about 18 rad/s for size
+                // and x, y a little softer, measured from its SurfaceFlinger layers. It lands on
+                // the icon with a bounce of a fixed size: the icon passes about 6dp beyond its
+                // spot and dips to about 95% of its size. The damping comes from the travel so a
+                // longer flight on a larger screen bounces by the same amount.
+                stiffnessX = 330f;
+                dampingX = 1f;
+                stiffnessY = 250f;
+                dampingY = cosBounceDamping(
+                        rp.getDimension(R.dimen.cos_close_bounce_distance),
+                        Math.abs(targetRect.centerY() - startRect.centerY()));
+                rectStiffness = 330f;
+                rectDamping = cosBounceDamping(
+                        COS_CLOSE_BOUNCE_SIZE_FRACTION * targetRect.width(),
+                        startRect.width() - targetRect.width());
+                cos = true;
+            }
+        }
+
+        /** ColorOS lets the landing icon dip to about 95% of its size. */
+        private static final float COS_CLOSE_BOUNCE_SIZE_FRACTION = 0.05f;
+
+        /**
+         * Damping ratio for which a spring released from rest overshoots its target by
+         * {@code overshoot} after travelling {@code distance}.
+         */
+        private static float cosBounceDamping(float overshoot, float distance) {
+            if (overshoot <= 0f || distance <= overshoot) return 1f;
+            double l = Math.log(overshoot / distance);
+            return Utilities.boundToRange(
+                    (float) (-l / Math.sqrt(Math.PI * Math.PI + l * l)), 0.5f, 1f);
         }
 
         private @Tracking int getDefaultTracking(@Nullable DeviceProfile deviceProfile) {

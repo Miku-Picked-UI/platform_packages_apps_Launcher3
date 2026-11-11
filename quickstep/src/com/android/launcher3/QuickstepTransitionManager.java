@@ -292,6 +292,70 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
     private final Interpolator mOpeningXInterpolator;
     private final Interpolator mOpeningInterpolator;
+    // [PenguinOS] ColorOS app motion for this launch (see cosExperience).
+    private final boolean mCosLaunch;
+
+    // [PenguinOS] ColorOS 17 has the window fully in place of its icon 43 ms into a launch.
+    private static final long COS_LAUNCH_ALPHA_DURATION = 43;
+    // ColorOS 17 zooms the wallpaper in over half a second.
+    private static final long COS_LAUNCH_DEPTH_DURATION = 500;
+
+    /**
+     * [PenguinOS] Whether apps open and close on PenguinOS' ColorOS / OxygenOS springs
+     * (Settings.Secure penguin_cos_app_motion, on unless turned off).
+     */
+    public static boolean cosExperience(android.content.Context context) {
+        return Settings.Secure.getInt(context.getContentResolver(),
+                "penguin_cos_app_motion", 1) == 1;
+    }
+
+    /**
+     * [PenguinOS] A spring of the given stiffness and damping ratio played over a fixed
+     * duration, so it can drive time based animators the way OxygenOS drives its app
+     * transitions. Values reach 1 at the end rather than asymptotically.
+     */
+    private static final class SpringInterpolator implements Interpolator {
+        private static final int TABLE_SIZE = 256;
+        private final float[] mTable = new float[TABLE_SIZE];
+
+        SpringInterpolator(double stiffness, double dampingRatio, long durationMs) {
+            double w = Math.sqrt(stiffness);
+            double seconds = durationMs / 1000.0;
+            for (int i = 0; i < TABLE_SIZE; i++) {
+                mTable[i] = (float) position(w, dampingRatio, seconds * i / (TABLE_SIZE - 1));
+            }
+            float end = mTable[TABLE_SIZE - 1];
+            for (int i = 0; i < TABLE_SIZE; i++) {
+                mTable[i] /= end;
+            }
+        }
+
+        /** The position at time {@code t} of a spring released from rest at 0 towards 1. */
+        private static double position(double w, double z, double t) {
+            if (z < 1) {
+                double wd = w * Math.sqrt(1 - z * z);
+                return 1 - Math.exp(-z * w * t)
+                        * (Math.cos(wd * t) + z * w / wd * Math.sin(wd * t));
+            }
+            if (z == 1) {
+                return 1 - (1 + w * t) * Math.exp(-w * t);
+            }
+            double root = Math.sqrt(z * z - 1);
+            double r1 = -w * (z - root);
+            double r2 = -w * (z + root);
+            return 1 - (r2 * Math.exp(r1 * t) - r1 * Math.exp(r2 * t)) / (r2 - r1);
+        }
+
+        @Override
+        public float getInterpolation(float input) {
+            if (input <= 0f) return mTable[0];
+            if (input >= 1f) return mTable[TABLE_SIZE - 1];
+            float idx = input * (TABLE_SIZE - 1);
+            int lo = (int) idx;
+            float frac = idx - lo;
+            return mTable[lo] + frac * (mTable[lo + 1] - mTable[lo]);
+        }
+    }
 
     private final SystemUiProxy mSystemUiProxy;
 
@@ -322,10 +386,19 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
             mSystemUiProxy.setStartingWindowListener(mStartingWindowListener);
         }
 
-        mOpeningXInterpolator = AnimationUtils.loadInterpolator(
-                launcher, R.interpolator.app_open_x);
-        mOpeningInterpolator = AnimationUtils.loadInterpolator(
-                launcher, R.interpolator.emphasized_interpolator);
+        // [PenguinOS] With ColorOS motion the window, its position and its corners grow out of
+        // the icon on one spring, as OxygenOS 16 does (stiffness 420, damping 1.04, measured from
+        // its SurfaceFlinger layers).
+        mCosLaunch = cosExperience(launcher);
+        if (mCosLaunch) {
+            mOpeningInterpolator = new SpringInterpolator(420, 1.04, APP_LAUNCH_DURATION);
+            mOpeningXInterpolator = mOpeningInterpolator;
+        } else {
+            mOpeningXInterpolator = AnimationUtils.loadInterpolator(
+                    launcher, R.interpolator.app_open_x);
+            mOpeningInterpolator = AnimationUtils.loadInterpolator(
+                    launcher, R.interpolator.emphasized_interpolator);
+        }
         mCoordinateTransfer = new RemoteAnimationCoordinateTransfer(mLauncher);
         mLatencyTracker = LatencyTracker.getInstance(launcher);
     }
@@ -889,9 +962,11 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
 
             FloatProp mIconScaleToFitScreen = new FloatProp(prop.initialAppIconScale,
                     prop.finalAppIconScale, mOpeningInterpolator);
-            FloatProp mIconAlpha = new FloatProp(prop.iconAlphaStart, 0f,
-                    clampToDuration(LINEAR, APP_LAUNCH_ALPHA_START_DELAY, APP_LAUNCH_ALPHA_DURATION,
-                            APP_LAUNCH_DURATION));
+            // [PenguinOS] With ColorOS motion the icon hands over to the window at once.
+            FloatProp mIconAlpha = new FloatProp(prop.iconAlphaStart, 0f, mCosLaunch
+                    ? clampToDuration(LINEAR, 0, COS_LAUNCH_ALPHA_DURATION, APP_LAUNCH_DURATION)
+                    : clampToDuration(LINEAR, APP_LAUNCH_ALPHA_START_DELAY,
+                            APP_LAUNCH_ALPHA_DURATION, APP_LAUNCH_DURATION));
 
             FloatProp mWindowRadius = new FloatProp(initialWindowRadius,
                     getWindowCornerRadius(mLauncher), mOpeningInterpolator);
@@ -1244,7 +1319,12 @@ public class QuickstepTransitionManager implements OnDeviceProfileChangeListener
         ObjectAnimator backgroundRadiusAnim = ObjectAnimator.ofFloat(
                         mLauncher.getDepthController().stateDepth, MULTI_PROPERTY_VALUE,
                         BACKGROUND_APP.getDepth(mLauncher))
-                .setDuration(APP_LAUNCH_DURATION);
+                .setDuration(mCosLaunch ? COS_LAUNCH_DEPTH_DURATION : APP_LAUNCH_DURATION);
+        if (mCosLaunch) {
+            // [PenguinOS] ColorOS zooms the wallpaper in on a soft spring as the app opens.
+            backgroundRadiusAnim.setInterpolator(
+                    new SpringInterpolator(196, 1, COS_LAUNCH_DEPTH_DURATION));
+        }
 
         if (allowBlurringLauncher) {
             // Create a temporary effect layer, that lives on top of launcher, so we can apply

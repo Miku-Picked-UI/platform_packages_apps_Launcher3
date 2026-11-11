@@ -628,4 +628,7 @@
     -->
     <dimen name="desktop_windowing_freeform_task_rounded_corner_radius">16dp</dimen>
 
+
+    <!-- [PenguinOS] How far a closing app's icon passes its spot in the ColorOS landing bounce -->
+    <dimen name="cos_close_bounce_distance">6dp</dimen>
 </resources>
