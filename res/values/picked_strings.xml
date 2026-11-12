@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 Miku-Picked UI
+     SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <!-- Custom home screen widget showing the lockscreen clock, where it lands on unlock -->
+    <string name="picked_lockscreen_clock_widget">Lockscreen clock</string>
+</resources>

@@ -198,6 +198,7 @@ import com.android.quickstep.OverviewComponentObserver;
 import com.android.quickstep.OverviewComponentObserver.OverviewChangeListener;
 import com.android.quickstep.RecentsModel;
 import com.android.quickstep.SystemUiProxy;
+import com.android.quickstep.picked.ClockFlyPlacer;
 import com.android.quickstep.TaskUtils;
 import com.android.quickstep.TouchInteractionService.TISBinder;
 import com.android.quickstep.fallback.RecentsState;
@@ -286,6 +287,8 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
      * recover. In all other cases this will remain null.
      */
     private PendingSplitSelectInfo mPendingSplitSelectInfo = null;
+
+    private ClockFlyPlacer mClockFlyPlacer;
 
     @Nullable
     private DesktopRecentsTransitionController mDesktopRecentsTransitionController;
@@ -678,6 +681,10 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
 
     @Override
     public void onDestroy() {
+        if (mClockFlyPlacer != null) {
+            mClockFlyPlacer.destroy();
+            mClockFlyPlacer = null;
+        }
         if (mAppTransitionManager != null) {
             mAppTransitionManager.onActivityDestroyed();
         }
@@ -838,6 +845,9 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
         View.setTracedRequestLayoutClassClass(TRACE_RELAYOUT_CLASS);
         OverviewComponentObserver.INSTANCE.get(this)
                 .addOverviewChangeListener(mOverviewChangeListener);
+        // Miku-Picked UI: fly the lockscreen clock home on unlock (PenguinOS).
+        mClockFlyPlacer = new ClockFlyPlacer(this);
+        mClockFlyPlacer.start();
     }
 
     @Override
@@ -974,6 +984,9 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
     @Override
     protected void onStop() {
         super.onStop();
+        if (mClockFlyPlacer != null && mClockFlyPlacer.getUnlockController() != null) {
+            mClockFlyPlacer.getUnlockController().dispatchState();
+        }
         if (mTaskbarInteractor != null && FeatureFlags.enableHomeTransitionListener()) {
             mTaskbarInteractor.onLauncherStop();
         }
@@ -1357,6 +1370,9 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
     @Override
     public void finishBindingItems(IntSet pagesBoundFirst) {
         super.finishBindingItems(pagesBoundFirst);
+        if (mClockFlyPlacer != null) {
+            mClockFlyPlacer.sync();
+        }
         // Instantiate and initialize WellbeingModel now that its loading won't interfere with
         // populating workspace.
         // TODO: Find a better place for this

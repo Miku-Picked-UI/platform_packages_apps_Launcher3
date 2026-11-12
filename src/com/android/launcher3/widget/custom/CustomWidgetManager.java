@@ -31,6 +31,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.launcher3.picked.LockscreenClockWidget;
 import com.android.launcher3.dagger.ApplicationContext;
 import com.android.launcher3.dagger.LauncherAppSingleton;
 import com.android.launcher3.dagger.LauncherBaseAppComponent;
@@ -84,6 +85,9 @@ public class CustomWidgetManager implements PluginListener<CustomWidgetPlugin> {
         mAppWidgetManager = widgetManager;
         mPlugins = new HashMap<>();
         mCustomWidgets = new ArrayList<>();
+
+        // Miku-Picked UI: built in custom widgets, registered first so their ids stay stable.
+        onPluginConnected(new LockscreenClockWidget(), context);
 
         pluginManager.addPluginListener(this, CustomWidgetPlugin.class, true);
         tracker.addCloseable(() -> pluginManager.removePluginListener(this));
