@@ -174,12 +174,16 @@ public class CustomWidgetManager implements PluginListener<CustomWidgetPlugin> {
             if (info.provider.equals(cn)) return info;
         }
 
-        List<AppWidgetProviderInfo> providers = mAppWidgetManager
-                .getInstalledProvidersForProfile(Process.myUserHandle());
-        // Miku-Picked UI: right after boot the widget service lists no providers yet. Without
-        // one to copy, the built-in widgets (registered in the constructor) were never
-        // registered, so their views came up as "Can't load widget" until re-added. Copy a
-        // blank info owned by the launcher instead; its providerInfo gives the same user.
+        // Miku-Picked UI: the launcher starts before the user unlocks, when the widget service
+        // refuses to list providers ("User 0 must be unlocked", which crashed the launcher
+        // while building the built-in widgets in the constructor) or lists none. Copy a blank
+        // info owned by the launcher then; its providerInfo gives the same user.
+        List<AppWidgetProviderInfo> providers;
+        try {
+            providers = mAppWidgetManager.getInstalledProvidersForProfile(Process.myUserHandle());
+        } catch (RuntimeException e) {
+            providers = java.util.Collections.emptyList();
+        }
         final AppWidgetProviderInfo base;
         if (providers.isEmpty()) {
             base = new AppWidgetProviderInfo();

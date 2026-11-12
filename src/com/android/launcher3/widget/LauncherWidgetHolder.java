@@ -410,9 +410,15 @@ public class LauncherWidgetHolder {
 
         // Binder can also inflate placeholder widgets in case of backup-restore. Skip
         // attaching such widgets
+        // Miku-Picked UI: custom widgets (CustomWidgetManager) aren't system widgets: they have
+        // no widget id to attach and their view is already complete. Recycling one went through
+        // the widget service with an invalid id and replaced it with "Can't load widget", which
+        // is how the Lockscreen clock widget came up after every reboot.
         boolean isRealWidget = (!(view instanceof PendingAppWidgetHostView pw)
                 || pw.isDeferredWidget())
-                && view.getAppWidgetInfo() != null;
+                && view.getAppWidgetInfo() != null
+                && !view.getAppWidgetInfo().provider.getClassName()
+                        .startsWith(LauncherAppWidgetProviderInfo.CLS_CUSTOM_WIDGET_PREFIX);
         if (isRealWidget && mViews.get(view.getAppWidgetId()) != view) {
             view = recycleExistingView(view);
             mViews.put(view.getAppWidgetId(), view);
