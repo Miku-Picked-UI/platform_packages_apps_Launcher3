@@ -23,6 +23,7 @@ import static com.android.launcher3.widget.LauncherAppWidgetProviderInfo.CLS_CUS
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProviderInfo;
 import android.content.ComponentName;
+import android.content.pm.ActivityInfo;
 import android.content.Context;
 import android.os.Parcel;
 import android.os.Process;
@@ -175,9 +176,23 @@ public class CustomWidgetManager implements PluginListener<CustomWidgetPlugin> {
 
         List<AppWidgetProviderInfo> providers = mAppWidgetManager
                 .getInstalledProvidersForProfile(Process.myUserHandle());
-        if (providers.isEmpty()) return null;
+        // Miku-Picked UI: right after boot the widget service lists no providers yet. Without
+        // one to copy, the built-in widgets (registered in the constructor) were never
+        // registered, so their views came up as "Can't load widget" until re-added. Copy a
+        // blank info owned by the launcher instead; its providerInfo gives the same user.
+        final AppWidgetProviderInfo base;
+        if (providers.isEmpty()) {
+            base = new AppWidgetProviderInfo();
+            ActivityInfo activity = new ActivityInfo();
+            activity.applicationInfo = mContext.getApplicationInfo();
+            activity.packageName = mContext.getPackageName();
+            activity.name = cn.getClassName();
+            base.providerInfo = activity;
+        } else {
+            base = providers.get(0);
+        }
         Parcel parcel = Parcel.obtain();
-        providers.get(0).writeToParcel(parcel, 0);
+        base.writeToParcel(parcel, 0);
         parcel.setDataPosition(0);
         CustomAppWidgetProviderInfo info = new CustomAppWidgetProviderInfo(parcel, false);
         parcel.recycle();

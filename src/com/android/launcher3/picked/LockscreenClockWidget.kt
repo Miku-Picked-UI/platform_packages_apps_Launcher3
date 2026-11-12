@@ -120,6 +120,9 @@ class LockscreenClockView(context: Context) : FrameLayout(context) {
         session = null
     }
 
+    // SystemUI may not answer yet right after boot; ask again while the widget is shown.
+    private val retry = Runnable { if (isAttachedToWindow) open() }
+
     init {
         setWillNotDraw(false)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -128,10 +131,12 @@ class LockscreenClockView(context: Context) : FrameLayout(context) {
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         MAIN_EXECUTOR.handler.removeCallbacks(release)
+        MAIN_EXECUTOR.handler.removeCallbacks(retry)
         open()
     }
 
     override fun onDetachedFromWindow() {
+        MAIN_EXECUTOR.handler.removeCallbacks(retry)
         MAIN_EXECUTOR.handler.postDelayed(release, RELEASE_DELAY_MS)
         super.onDetachedFromWindow()
     }
@@ -155,6 +160,9 @@ class LockscreenClockView(context: Context) : FrameLayout(context) {
             MAIN_EXECUTOR.execute {
                 opening = false
                 session = reply?.getParcelable(KEY_CALLBACK, Messenger::class.java)
+                if (session == null && isAttachedToWindow) {
+                    MAIN_EXECUTOR.handler.postDelayed(retry, RETRY_MS)
+                }
             }
         }
     }
@@ -210,6 +218,7 @@ class LockscreenClockView(context: Context) : FrameLayout(context) {
     private companion object {
         const val TAG = "LockscreenClockWidget"
         const val RELEASE_DELAY_MS = 5000L
+        const val RETRY_MS = 2000L
         val PROVIDER: Uri = Uri.parse("content://com.android.systemui.customization")
 
         const val METHOD = "home_clock"
