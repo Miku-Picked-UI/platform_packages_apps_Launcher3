@@ -20,7 +20,6 @@ import static com.android.launcher3.folder.ClippedFolderIconLayoutRule.ICON_OVER
 import static com.android.launcher3.folder.ClippedFolderIconLayoutRule.MAX_NUM_ITEMS_IN_PREVIEW;
 import static com.android.launcher3.folder.FolderGridOrganizer.createFolderGridOrganizer;
 import static com.android.launcher3.folder.PreviewItemManager.INITIAL_ITEM_ANIMATION_DURATION;
-import static com.android.launcher3.LauncherPrefsExt.SHOW_DESKTOP_LABELS;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_AUTO_LABELED;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_AUTO_LABELING_SKIPPED_EMPTY_PRIMARY;
 import static com.android.launcher3.logging.StatsLogManager.LauncherEvent.LAUNCHER_FOLDER_AUTO_LABELING_SKIPPED_EMPTY_SUGGESTIONS;
@@ -60,8 +59,6 @@ import com.android.launcher3.CheckLongPressHelper;
 import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.DropTarget.DragObject;
 import com.android.launcher3.Launcher;
-import com.android.launcher3.LauncherPrefChangeListener;
-import com.android.launcher3.LauncherPrefs;
 import com.android.launcher3.LauncherSettings;
 import com.android.launcher3.LauncherState;
 import com.android.launcher3.OnAlarmListener;
@@ -194,7 +191,6 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
 
     private boolean mRequestedTextVisible = true;
 
-    private final LauncherPrefChangeListener mPrefListener;
 
     public void setIsResizing(boolean isResizing) {
         if (mFolderName == null) return;
@@ -205,7 +201,6 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     public boolean shouldShowFolderName() {
         return mRequestedTextVisible
                 && mFolderName != null
-                && SHOW_DESKTOP_LABELS.get(getContext())
                 && mInfo != null
                 && !TextUtils.isEmpty(mInfo.title);
     }
@@ -256,14 +251,10 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
                 mFolderName.setPadding(0, 0, 0, 0);
             } else if (mActivity != null && mInfo != null) {
                 DeviceProfile grid = mActivity.getDeviceProfile();
-                boolean isAllAppsFolder = AxFolderExt.isAllAppsFolder(mInfo);
                 lp.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
                 lp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
-                lp.topMargin = isAllAppsFolder
-                        ? grid.getAllAppsProfile().getIconSizePx()
-                                + grid.getAllAppsProfile().getIconDrawablePaddingPx()
-                        : grid.getWorkspaceIconProfile().getIconSizePx()
-                                + grid.getWorkspaceIconProfile().getIconDrawablePaddingPx();
+                lp.topMargin = grid.getWorkspaceIconProfile().getIconSizePx()
+                        + grid.getWorkspaceIconProfile().getIconDrawablePaddingPx();
                 mFolderName.setIconVisible(false);
                 int topPadding = mDefaultLabelPaddingTop != -1 ? mDefaultLabelPaddingTop : mFolderName.getPaddingTop();
                 int bottomPadding = mDefaultLabelPaddingBottom != -1 ? mDefaultLabelPaddingBottom : mFolderName.getPaddingBottom();
@@ -283,18 +274,6 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
         mLongPressHelper = new CheckLongPressHelper(this);
         mPreviewLayoutRule = new ClippedFolderIconLayoutRule();
         mPreviewItemManager = new PreviewItemManager(this);
-        mPrefListener = key -> {
-            if (SHOW_DESKTOP_LABELS.getSharedPrefKey().equals(key)) {
-                updateTextVisibility();
-                mPreviewItemManager.recomputePreviewDrawingParams();
-                layoutFolderName();
-                invalidate();
-                requestLayout();
-                if (getParent() instanceof View parentView) {
-                    parentView.invalidate();
-                }
-            }
-        };
         mDotParams = new DotRenderer.DrawParams();
         mDotParams.setDotColor(Themes.getAttrColor(context, R.attr.notificationDotColor));
         mDotParams.shapeInfo = ThemeManager.INSTANCE.get(context).getIconState().getIconShapeInfo();
@@ -1098,15 +1077,17 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     public void drawDot(Canvas canvas) {
         if (!mForceHideDot && ((mDotInfo != null && mDotInfo.hasDot()) || mDotScale > 0)) {
             Rect iconBounds = mDotParams.iconBounds;
-            // FolderIcon draws the icon to be top-aligned (with padding) & horizontally-centered
-            int iconSize = mActivity.getDeviceProfile().getWorkspaceIconProfile().getIconSizePx();
-            iconBounds.left = (getWidth() - iconSize) / 2;
-            iconBounds.right = iconBounds.left + iconSize;
-            iconBounds.top = getPaddingTop();
-            iconBounds.bottom = iconBounds.top + iconSize;
-
-            float iconScale = (float) mBackground.previewSize / iconSize;
-            Utilities.scaleRectAboutCenter(iconBounds, iconScale);
+            // The dot sits on the preview background's top corner; for a resized (multi span)
+            // folder that is the top right icon-sized corner of the larger background.
+            mBackground.getBounds(iconBounds);
+            if (isMultiSpanFolder()) {
+                int iconSize = mActivity.getDeviceProfile().getWorkspaceIconProfile().getIconSizePx();
+                iconBounds.left = iconBounds.right - iconSize;
+                iconBounds.bottom = iconBounds.top + iconSize;
+            }
+            if (mBackground.mScale != 1f) {
+                Utilities.scaleRectAboutCenter(iconBounds, mBackground.mScale);
+            }
 
             // If we are animating to the accepting state, animate the dot out.
             mDotParams.scale = Math.max(0, mDotScale - mBackground.getAcceptScaleProgress());
@@ -1398,17 +1379,10 @@ public class FolderIcon extends FrameLayout implements FloatingIconViewCompanion
     }
 
     @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        LauncherPrefs.get(getContext()).addListener(mPrefListener, SHOW_DESKTOP_LABELS);
-    }
-
-    @Override
     protected void onDetachedFromWindow() {
         if (mPressScaleAnimator != null) {
             mPressScaleAnimator.cancel();
         }
-        LauncherPrefs.get(getContext()).removeListener(mPrefListener, SHOW_DESKTOP_LABELS);
         super.onDetachedFromWindow();
     }
 
