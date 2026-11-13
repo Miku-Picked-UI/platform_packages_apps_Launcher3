@@ -3721,7 +3721,7 @@ public class Workspace<T extends View & PageIndicator> extends PagedView<T>
     /**
      * Returns a specific CellLayout
      */
-    CellLayout getParentCellLayoutForView(View v) {
+    public CellLayout getParentCellLayoutForView(View v) {
         for (CellLayout layout : getWorkspaceAndHotseatCellLayouts()) {
             if (layout.getShortcutsAndWidgets().indexOfChild(v) > -1) {
                 return layout;
