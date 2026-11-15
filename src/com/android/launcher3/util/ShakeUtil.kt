@@ -24,7 +24,10 @@ import android.hardware.SensorManager
 import kotlin.math.sqrt
 
 class ShakeUtils(context: Context) : SensorEventListener {
-    private var mOnShakeListeners: ArrayList<OnShakeListener>? = null
+    private val mOnShakeListeners = ArrayList<OnShakeListener>()
+    private val mSensorManager = context.getSystemService(SensorManager::class.java)
+    private val mSensor = mSensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private var mRegistered = false
 
     // Last time we triggered shake
     private var mLastShakeTime = 0L
@@ -39,14 +42,26 @@ class ShakeUtils(context: Context) : SensorEventListener {
         fun onShake(speed: Double)
     }
 
+    // Miku-Picked UI: only listen to the accelerometer while someone wants shakes (Overview is
+    // visible). It used to be registered for the launcher's whole lifetime, keeping the sensor
+    // running at 15 Hz all day, also with the screen off.
     fun bindShakeListener(listener: OnShakeListener?) {
-        if (listener != null) {
-            mOnShakeListeners?.add(listener)
+        if (listener == null || mOnShakeListeners.contains(listener)) return
+        mOnShakeListeners.add(listener)
+        if (!mRegistered && mSensor != null) {
+            mRegistered = mSensorManager!!.registerListener(this, mSensor,
+                SensorManager.SENSOR_DELAY_UI)
+            // Start fresh, so the first reading isn't compared with a stale position.
+            mLastUpdateTime = 0L
         }
     }
 
     fun unBindShakeListener(listener: OnShakeListener) {
-        mOnShakeListeners?.remove(listener)
+        mOnShakeListeners.remove(listener)
+        if (mOnShakeListeners.isEmpty() && mRegistered) {
+            mSensorManager!!.unregisterListener(this)
+            mRegistered = false
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -85,10 +100,8 @@ class ShakeUtils(context: Context) : SensorEventListener {
             return
         }
         mLastShakeTime = curShakeTime
-	mOnShakeListeners?.let {
-            for (i in it.indices) {
-                it[i].onShake(speed)
-            }
+        for (listener in ArrayList(mOnShakeListeners)) {
+            listener.onShake(speed)
         }
     }
 
@@ -106,10 +119,4 @@ class ShakeUtils(context: Context) : SensorEventListener {
         private const val SHAKE_INTERVAL_MILLISECOND = 55
     }
 
-    init {
-        val mSensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        mSensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
-        mOnShakeListeners = ArrayList()
-    }
 }
