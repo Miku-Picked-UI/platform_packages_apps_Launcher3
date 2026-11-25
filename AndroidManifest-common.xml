@@ -46,6 +46,8 @@
     <uses-permission android:name="android.permission.WAKEUP_SURFACE_FLINGER" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES" />
+    <!-- [PenguinOS] Frequently used apps in recents rank apps by usage -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
     <permission
         android:name="${applicationId}.permission.GRID_CONTROL"

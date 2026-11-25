@@ -143,11 +143,13 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
     private ShakeUtils mShakeUtils;
 
     /** Holds MultiValueAlpha values for all actions bars */
-    private final MultiValueAlpha[] mMultiValueAlphas = new MultiValueAlpha[2];
+    private final MultiValueAlpha[] mMultiValueAlphas = new MultiValueAlpha[3];
     /** Index used for single-task actions in the mMultiValueAlphas array */
     private static final int ACTIONS_ALPHAS = 0;
     /** Index used for grouped-task actions in the mMultiValueAlphas array */
     private static final int GROUP_ACTIONS_ALPHAS = 1;
+    /** [PenguinOS] Index used for the frequently used apps row */
+    private static final int FREQUENT_APPS_ALPHAS = 2;
 
     /** Container for the action buttons below a focused, non-split Overview tile. */
     protected LinearLayout mActionButtons;
@@ -173,6 +175,18 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
     @Nullable
     protected DeviceProfile mDp;
     private final Rect mTaskSize = new Rect();
+    private FrequentAppsView mFrequentApps;
+    // The row changes the task layout, which DeviceProfile works out once, so the launcher
+    // restarts to pick the switch up, as it does for the taskbar switch.
+    private final android.database.ContentObserver mFrequentAppsObserver =
+            new android.database.ContentObserver(null) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    boolean reserved = mDp != null && mDp.frequentAppsHeight > 0;
+                    if (FrequentAppsView.isEnabled(getContext()) != reserved) System.exit(0);
+                }
+            };
+    private boolean mFrequentAppsObserverRegistered;
     private boolean mIsGroupedTask = false;
     private boolean mCanSaveAppPair = false;
 
@@ -208,6 +222,26 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (!mFrequentAppsObserverRegistered) {
+            getContext().getContentResolver().registerContentObserver(
+                    android.provider.Settings.Secure.getUriFor(FrequentAppsView.SETTING), false,
+                    mFrequentAppsObserver);
+            mFrequentAppsObserverRegistered = true;
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        if (mFrequentAppsObserverRegistered) {
+            getContext().getContentResolver().unregisterContentObserver(mFrequentAppsObserver);
+            mFrequentAppsObserverRegistered = false;
+        }
+        super.onDetachedFromWindow();
+    }
+
+    @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
         // Initialize 2 view containers: one for single tasks, one for grouped tasks.
@@ -215,11 +249,13 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
         // Currently, the only grouped task action is "save app pairs".
         mActionButtons = findViewById(R.id.action_buttons);
         mSaveAppPairButton = findViewById(R.id.action_save_app_pair);
+        mFrequentApps = findViewById(R.id.frequent_apps);
         TypefaceUtils.setTypeface(mSaveAppPairButton, FontFamily.GSF_LABEL_LARGE);
         // Initialize a list to hold alphas for mActionButtons and any group action buttons.
         mMultiValueAlphas[ACTIONS_ALPHAS] = new MultiValueAlpha(mActionButtons, NUM_ALPHAS);
         mMultiValueAlphas[GROUP_ACTIONS_ALPHAS] =
                 new MultiValueAlpha(mSaveAppPairButton, NUM_ALPHAS);
+        mMultiValueAlphas[FREQUENT_APPS_ALPHAS] = new MultiValueAlpha(mFrequentApps, NUM_ALPHAS);
         Arrays.stream(mMultiValueAlphas).forEach(a -> a.setUpdateVisibility(true));
         // To control alpha simultaneously on mActionButtons and any group action buttons, we set up
         // an AnimatedFloat for each alpha property.
@@ -355,6 +391,10 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
         Log.d(TAG, "updateActionButtonsVisibility() called: showSingleTaskActions = ["
                 + showSingleTaskActions + "], showGroupActions = [" + showGroupActions + "]");
         getActionsAlphas().get(INDEX_GROUPED_ALPHA).setValue(showSingleTaskActions ? 1 : 0);
+        boolean showFrequentApps = FrequentAppsView.isEnabled(getContext())
+                && !mDp.getDeviceProperties().isTablet();
+        mMultiValueAlphas[FREQUENT_APPS_ALPHAS].get(INDEX_GROUPED_ALPHA)
+                .setValue(showFrequentApps ? 1 : 0);
         getGroupActionsAlphas().get(INDEX_GROUPED_ALPHA).setValue(showGroupActions ? 1 : 0);
     }
 
@@ -434,6 +474,19 @@ public class OverviewActionsView<T extends OverlayUICallbacks> extends FrameLayo
     public void updateVerticalMargin(NavigationMode mode) {
         updateActionBarPosition(mActionButtons);
         updateActionBarPosition(mSaveAppPairButton);
+        updateFrequentAppsPosition();
+    }
+
+    /** [PenguinOS] Centres the frequently used apps in the space kept for them below. */
+    private void updateFrequentAppsPosition() {
+        if (mDp == null || mFrequentApps == null) {
+            return;
+        }
+        LayoutParams lp = (LayoutParams) mFrequentApps.getLayoutParams();
+        int iconSize = getResources().getDimensionPixelSize(R.dimen.frequent_apps_icon_size);
+        int bottomMargin = mDp.getOverviewActionsClaimedSpaceBelow()
+                + Math.max(0, mDp.frequentAppsHeight - iconSize) / 2;
+        lp.setMargins(lp.leftMargin, lp.topMargin, lp.rightMargin, bottomMargin);
     }
 
     /** Positions actions buttons according to device settings and insets. */

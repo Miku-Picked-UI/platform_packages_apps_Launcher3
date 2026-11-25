@@ -160,6 +160,8 @@ public class DeviceProfile {
     public final int numShownAllAppsColumns;
 
     private final OverviewProfile overviewProfile;
+    /** [PenguinOS] Height kept free for the frequently used apps in recents, 0 when off. */
+    public int frequentAppsHeight;
 
     // Split staging
     public int splitPlaceholderInset;
@@ -294,6 +296,10 @@ public class DeviceProfile {
         final Resources res = context.getResources();
 
         overviewProfile = OverviewProfile.Factory.createOverviewProfile(res);
+        // [PenguinOS] Room for the frequently used apps row under the overview actions
+        frequentAppsHeight = android.provider.Settings.Secure.getInt(context.getContentResolver(),
+                "recents_frequent_apps", 0) == 1
+                ? res.getDimensionPixelSize(R.dimen.frequent_apps_claimed_height) : 0;
 
         mMetrics = res.getDisplayMetrics();
 
@@ -1405,7 +1411,8 @@ public class DeviceProfile {
     public int getOverviewActionsClaimedSpace() {
         int overviewActionsSpace = mDeviceProperties.isTablet() && enableGridOnlyOverview()
                 ? 0
-                : (overviewProfile.getActionsTopMarginPx() + overviewProfile.getActionsHeight());
+                : (overviewProfile.getActionsTopMarginPx() + overviewProfile.getActionsHeight()
+                        + frequentAppsHeight);
         return overviewActionsSpace + getOverviewActionsClaimedSpaceBelow();
     }
 

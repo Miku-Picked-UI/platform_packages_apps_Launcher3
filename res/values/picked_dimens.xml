@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The PenguinOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <!-- [PenguinOS] Frequently used apps under the overview actions -->
+    <dimen name="frequent_apps_claimed_height">76dp</dimen>
+    <dimen name="frequent_apps_icon_size">52dp</dimen>
+    <dimen name="frequent_apps_icon_spacing">28dp</dimen>
+</resources>

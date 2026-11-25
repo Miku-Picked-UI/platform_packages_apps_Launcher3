@@ -8,6 +8,8 @@
     <!-- Additional permissions on top of privapp-permissions-platform.xml -->
     <privapp-permissions package="com.android.launcher3">
         <permission name="android.permission.FORCE_STOP_PACKAGES"/>
+        <!-- Frequently used apps in recents -->
+        <permission name="android.permission.PACKAGE_USAGE_STATS"/>
     </privapp-permissions>
 
 </permissions>
