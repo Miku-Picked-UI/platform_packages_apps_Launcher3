@@ -21,11 +21,13 @@ import static com.android.launcher3.Flags.enablePredictiveBackInOverview;
 import static com.android.launcher3.logging.StatsLogManager.LAUNCHER_STATE_OVERVIEW;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.SystemProperties;
 
 import androidx.core.graphics.ColorUtils;
 
+import com.android.internal.graphics.picked.GlassLayer;
 import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.Launcher;
 import com.android.launcher3.LauncherState;
@@ -163,11 +165,17 @@ public class OverviewState extends LauncherState {
 
     @Override
     public ScrimColors getWorkspaceScrimColor(Launcher launcher) {
-        return new ScrimColors(
-                /* backgroundColor */ Themes.getAttrColor(launcher, R.attr.overviewScrimColor),
-                /* foregroundColor */ ColorUtils.compositeColors(
+        int bgColor = Themes.getAttrColor(launcher, R.attr.overviewScrimColor);
+        int fgColor = ColorUtils.compositeColors(
                 Themes.getAttrColor(launcher, R.attr.overviewScrimForegroundPrimary),
-                Themes.getAttrColor(launcher, R.attr.overviewScrimForegroundSecondary)));
+                Themes.getAttrColor(launcher, R.attr.overviewScrimForegroundSecondary));
+        if (GlassLayer.isActive(GlassLayer.LAUNCHER)) {
+            int alpha = Math.max(0, Math.min(255,
+                    Math.round(255f * 0.35f * GlassLayer.tintScale())));
+            bgColor = ColorUtils.setAlphaComponent(bgColor, alpha);
+            fgColor = Color.TRANSPARENT;
+        }
+        return new ScrimColors(/* backgroundColor */ bgColor, /* foregroundColor */ fgColor);
     }
 
     @Override

@@ -21,6 +21,9 @@ import static com.android.launcher3.logging.StatsLogManager.LAUNCHER_STATE_ALLAP
 import android.content.Context;
 import android.graphics.Color;
 
+import androidx.core.graphics.ColorUtils;
+
+import com.android.internal.graphics.picked.GlassLayer;
 import com.android.internal.jank.Cuj;
 import com.android.launcher3.DeviceProfile;
 import com.android.launcher3.Flags;
@@ -211,6 +214,11 @@ public class AllAppsState extends LauncherState {
             backgroundColor = launcher.getResources().getColor(R.color.widgets_picker_scrim);
         } else {
             backgroundColor = Themes.getAttrColor(launcher, R.attr.allAppsScrimColor);
+        }
+        if (GlassLayer.isActive(GlassLayer.LAUNCHER)) {
+            int alpha = Math.max(0, Math.min(255,
+                    Math.round(255f * 0.42f * GlassLayer.tintScale())));
+            backgroundColor = ColorUtils.setAlphaComponent(backgroundColor, alpha);
         }
         return new ScrimColors(backgroundColor, /* foregroundColor */ Color.TRANSPARENT);
     }
